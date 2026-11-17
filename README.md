@@ -23,7 +23,7 @@ Variable opcional `FORESTMAP_DEMO=1` (en *Secrets*: `FORESTMAP_DEMO = "1"`) mues
 ## Módulos
 `procesado` (DEM/DSM/CHM) · `copas` (ápices, copas, capas, volúmenes) · `vectores` (ráster→polígono exacto) ·
 `estructuras` (antena/vallado/instrumentos) · `roi` · `pipeline` · `figuras` (informe) · `graficos` (Plotly) ·
-`informe` · `exportar` · `sintetico` (escena de prueba) · `pruebas/`.
+`informe` · `exportar` · `morfologia` (forma de las copas) · `sintetico` (escena de prueba) · `pruebas/`.
 
 ## Pruebas
 `bash ejecutar_pruebas.sh` (con datos sintéticos) y `python pruebas/stub_streamlit.py` (humo de la interfaz sin Streamlit).
@@ -35,6 +35,29 @@ Variable opcional `FORESTMAP_DEMO=1` (en *Secrets*: `FORESTMAP_DEMO = "1"`) mues
 - Dos épocas: emparejamiento de ápices a ≤ 1,2 m (protocolo ICTS) o copas solapadas → persisten / crecieron / estables / perdieron altura / mortalidad probable / nuevos, por especie.
 - Validación con inventario de campo (xlsx): estima el desplazamiento y cuenta fichas emparejadas y tapadas.
 - Informe con algoritmos, vistas 3D de la nube y comparación con campo.
+
+## Novedades V3.2 (forma de las copas)
+La tabla de árboles y la capa `Copas_<época>` llevan once columnas más con la morfometría de
+cada polígono de copa, calculadas con las mismas fórmulas que la herramienta **Max Line Inside
+Polygon** de [qgis-research-tools](https://github.com/Digdgeo/qgis-research-tools), de modo que
+los valores coinciden con los que daría QGIS sobre la capa exportada:
+
+| campo | qué es |
+|---|---|
+| `perimeter` | perímetro del polígono (m) |
+| `major_len` · `major_azim` | diagonal interior más larga (eje mayor) y su azimut, 0–180° |
+| `orient` | orientación del lado largo del rectángulo mínimo rotado, 0–180° |
+| `mid_width` · `max_width` | anchura perpendicular al eje mayor: en su punto medio y la máxima |
+| `elongation` | `major_len / max_width` |
+| `compact` · `rectang` · `convex` · `shape_idx` | índices de forma (Polsby-Popper, rectangularidad, convexidad, crenulación) |
+
+Se activa con la casilla **«Parámetros de forma de la copa»** del paso 5 (por defecto sí) y
+cuesta unos 4,5 ms por copa. Si falta `shapely`, las columnas salen vacías y el resto sigue igual.
+
+**Antes de usarlas**, léase el encabezado de `morfologia.py`: sobre copas rasterizadas a 0,5 m,
+`orient` sale cuantizada a la malla de píxeles y los índices que dividen por el perímetro
+arrastran el sesgo de la escalera de píxeles. Las que se portan son las de longitud
+(`major_len`, `max_width`, `elongation`).
 
 ## Notas
 - Sin límite superior de altura: los individuos ≥ umbral (8 m) se marcan para auditoría, no se descartan.

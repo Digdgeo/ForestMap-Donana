@@ -11,3 +11,4 @@ Resultados*/
 Informe_*.html
 .streamlit/secrets.toml
 .DS_Store
+cloth_nodes.txt

@@ -379,11 +379,12 @@ elif paso == PASOS[4]:
         P.umbral_alto_m = c.number_input("🔝 Umbral de auditoría 'alto' (m)", 3.0, 30.0, P.umbral_alto_m, help="Los árboles más altos que esto se listan aparte para revisarlos con calma (nunca se borran). Sirve para detectar cosas raras, como una antena confundida con un árbol.")
         P.area_min_m2 = a.number_input("📐 Área mínima de copa (m²)", 0.05, 5.0, float(P.area_min_m2), help="Las copas más pequeñas que esto se descartan o se unen a una vecina. Más alto = menos árboles diminutos (que suelen ser ruido).")
         voxel = b.checkbox("🧊 Calcular volumen ocupado por vóxeles", True, help="Calcula el volumen de copa contando cubitos de 25 cm que contienen puntos. Es más lento pero más realista que el volumen de «envoltura». Desmárcalo si quieres rapidez.")
+        morf = c.checkbox("📏 Parámetros de forma de la copa", True, help="Añade a la tabla y a la capa de copas el eje mayor, la anchura máxima, la elongación y los índices de forma del polígono (las mismas fórmulas que la herramienta «Max Line Inside Polygon» de QGIS). Cuesta unos milisegundos por copa.")
     if st.button("Detectar árboles y calcular capas", type="primary"):
         S.arb, S.comp = {}, None
         for e in S.datos:
             with st.spinner(f"Árboles {e}…"):
-                S.arb[e] = pl.analizar_arboles(S.modelos, S.datos, e, P, S.roi, S.estr.get(e), S.tab_est.get(e), voxel)
+                S.arb[e] = pl.analizar_arboles(S.modelos, S.datos, e, P, S.roi, S.estr.get(e), S.tab_est.get(e), voxel, morf)
         S.campo = None
     if not S.arb:
         st.stop()

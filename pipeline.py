@@ -12,6 +12,7 @@ import pandas as pd
 
 import copas as cp
 import estructuras as es
+import morfologia as mo
 import procesado as pr
 
 
@@ -63,7 +64,8 @@ def mascara_estructuras(modelos, est, tabla=None):
 
 
 # ----------------------------------------------------------------- paso 5
-def analizar_arboles(modelos, datos, et, params, roi, est=None, tabla_est=None, voxel=True):
+def analizar_arboles(modelos, datos, et, params, roi, est=None, tabla_est=None, voxel=True,
+                     morfologia=True):
     """Individuos, copas, capas de altura, volúmenes y vectores de una época."""
     malla, res = modelos['malla_chm'], modelos['res_chm']
     chm = np.nan_to_num(modelos['epocas'][et]['chm'])
@@ -84,6 +86,10 @@ def analizar_arboles(modelos, datos, et, params, roi, est=None, tabla_est=None, 
         vv = cp.volumen_ocupado(d['xyz'][ns, 0], d['xyz'][ns, 1], hag, labels, malla, res)
         tabla['vol_voxel_m3'] = vv[tabla['id'].values - 1]
     vec = cp.construir_vectores(malla, res, labels, chm_eff, tabla, cap, simplificar=res * 0.35)
+    if morfologia and len(tabla):
+        df_m = mo.metricas(vec['copas'])
+        mo.anotar(vec['copas'], df_m)
+        tabla = tabla.merge(df_m, on='id', how='left')
     rodal = cp.resumen_rodal(tabla, chm_eff, labels, roi_m, res, params.hcorte_m, excl, cap)
 
     # matriz de volumen por capa (formato ancho) para el CSV
