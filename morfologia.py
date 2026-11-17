@@ -63,8 +63,11 @@ try:
 except Exception:                                                   # pragma: no cover
     HAY_SHAPELY = False
 
-CAMPOS = ['perimeter', 'major_len', 'major_azim', 'orient', 'mid_width',
-          'max_width', 'elongation', 'compact', 'rectang', 'convex', 'shape_idx']
+CAMPOS = ['perimeter', 'major_len', 'major_azim', 'exter_len', 'exter_azim', 'orient',
+          'mid_width', 'max_width', 'elongation', 'compact', 'rectang', 'convex', 'shape_idx']
+
+# Las cuatro líneas que dibuja la herramienta de QGIS, en el orden en que se pintan.
+TIPOS_LINEA = ('eje', 'secante', 'anch_med', 'anch_max')
 
 N_PASOS = 50        # paralelas a cada lado del eje mayor; el original usa 50
 
@@ -85,26 +88,43 @@ def _azimut(x1, y1, x2, y2):
     return math.degrees(math.atan2(x2 - x1, y2 - y1)) % 180.0
 
 
-def _diagonal_interior(poly):
-    """Segmento más largo entre vértices del anillo exterior que queda enteramente
-    dentro del polígono. Mismo resultado que el bucle O(n²) del original, pero
-    probando los pares de mayor a menor y parando en el primero válido."""
+def _diagonales(poly):
+    """Las dos diagonales del original, en una sola pasada:
+
+    * **interior**: el segmento más largo entre vértices del anillo exterior que queda
+      enteramente dentro del polígono. Es el eje mayor.
+    * **secante**: el más largo que NO cabe entero, o sea el que se sale por un entrante.
+      En un polígono convexo no existe, y la columna sale vacía: es correcto, no es un fallo.
+
+      Aquí hay **una desviación deliberada respecto al original**: él acepta como exterior
+      cualquier segmento que *toque* el polígono (`intersects`), y eso deja entrar los propios
+      lados, que tocan pero no se salen. Se exige en su lugar que el segmento **no esté
+      cubierto** por el polígono (`not poly.covers`), que es lo que de verdad quiere decir
+      «se sale». Con el filtro del original, un rectángulo daría como secante uno de sus lados.
+
+    Se prueban los pares de mayor a menor con orden estable (entre diagonales de la misma
+    longitud gana la del primer par de vértices, igual que el bucle del original) y se para
+    en cuanto se tienen las dos.
+    """
     v = np.asarray(poly.exterior.coords)[:-1]
     n = len(v)
     if n < 2:
-        return None
+        return None, None
     d = np.hypot(v[:, 0][:, None] - v[:, 0][None, :], v[:, 1][:, None] - v[:, 1][None, :])
     iu = np.triu_indices(n, 1)
-    # Orden estable: entre diagonales de la misma longitud (las copas rasterizadas son
-    # muy simetricas y los empates son frecuentes) gana la del primer par de vertices,
-    # que es la que elegiria el bucle del original.
     orden = np.argsort(-d[iu], kind='stable')
+    dentro = fuera = None
     for k in orden:
         i, j = iu[0][k], iu[1][k]
         linea = LineString([tuple(v[i]), tuple(v[j])])
         if linea.within(poly):
-            return linea
-    return None
+            if dentro is None:
+                dentro = linea
+        elif fuera is None and not poly.covers(linea):
+            fuera = linea
+        if dentro is not None and fuera is not None:
+            break
+    return dentro, fuera
 
 
 def _orientacion_mrr(poly):
@@ -122,33 +142,52 @@ def _orientacion_mrr(poly):
     return _azimut(*mejor) if mejor else np.nan
 
 
+def _mas_larga(geom):
+    """De un corte que puede salir partido en varios trozos, el trozo más largo (que es el
+    que tiene sentido dibujar). La longitud que se mide, como en el original, es la suma."""
+    if geom.is_empty:
+        return None
+    if geom.geom_type == "LineString":
+        return geom
+    partes = [g for g in getattr(geom, "geoms", []) if g.geom_type == "LineString"]
+    return max(partes, key=lambda g: g.length) if partes else None
+
+
 def _anchuras(poly, eje):
-    """Anchura en el punto medio del eje mayor y anchura máxima. La perpendicular se
-    desliza a lo largo del eje; para una recta, desplazarla equivale al
+    """Anchura en el punto medio del eje mayor y anchura máxima, con sus dos líneas. La
+    perpendicular se desliza a lo largo del eje; para una recta, desplazarla equivale al
     `parallel_offset` del original, y evita su geometría de buffer."""
     (x1, y1), (x2, y2) = list(eje.coords)
     L = eje.length
     if L <= 0:
-        return np.nan, np.nan
+        return np.nan, None, np.nan, None
     ux, uy = (x2 - x1) / L, (y2 - y1) / L         # unitario del eje
     px, py = -uy, ux                              # su perpendicular
     mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
 
     def corte(cx, cy):
         rec = LineString([(cx - px * L, cy - py * L), (cx + px * L, cy + py * L)])
-        return rec.intersection(poly).length
+        return rec.intersection(poly)
 
-    media = corte(mx, my)
+    g_med = corte(mx, my)
+    media = g_med.length
     paso = L / (2.0 * N_PASOS)
-    maxima = max(corte(mx + ux * paso * i, my + uy * paso * i)
-                 for i in range(-N_PASOS, N_PASOS + 1))
-    return (media if media > 0 else np.nan), (maxima if maxima > 0 else np.nan)
+    maxima, g_max = -1.0, None
+    for i in range(-N_PASOS, N_PASOS + 1):
+        g = corte(mx + ux * paso * i, my + uy * paso * i)
+        if g.length > maxima:
+            maxima, g_max = g.length, g
+    return ((media if media > 0 else np.nan), _mas_larga(g_med),
+            (maxima if maxima > 0 else np.nan), _mas_larga(g_max) if g_max is not None else None)
 
 
 # ------------------------------------------------------------------- métricas
 def _de_un_poligono(poly):
+    """Devuelve (métricas, geometrías). Las geometrías son las cuatro líneas del original:
+    eje mayor, secante, anchura en el punto medio y anchura máxima."""
     area, perim = poly.area, poly.length
     m = dict.fromkeys(CAMPOS, np.nan)
+    g = dict.fromkeys(TIPOS_LINEA, None)
     m['perimeter'] = perim
     m['orient'] = _orientacion_mrr(poly)
     if perim > 0:
@@ -164,33 +203,62 @@ def _de_un_poligono(poly):
                 m['rectang'] = area / ar
         except Exception:
             pass
-    eje = _diagonal_interior(poly)
+    eje, secante = _diagonales(poly)
+    if secante is not None:
+        c = list(secante.coords)
+        g['secante'] = secante
+        m['exter_len'] = secante.length
+        m['exter_azim'] = _azimut(c[0][0], c[0][1], c[1][0], c[1][1])
     if eje is not None:
         c = list(eje.coords)
+        g['eje'] = eje
         m['major_len'] = eje.length
         m['major_azim'] = _azimut(c[0][0], c[0][1], c[1][0], c[1][1])
-        m['mid_width'], m['max_width'] = _anchuras(poly, eje)
+        m['mid_width'], g['anch_med'], m['max_width'], g['anch_max'] = _anchuras(poly, eje)
         ref = m['max_width'] if np.isfinite(m['max_width']) else m['mid_width']
         if np.isfinite(ref) and ref > 0:
             m['elongation'] = m['major_len'] / ref
-    return m
+    return m, g
 
 
-def metricas(entidades, decimales=3):
-    """DataFrame con `id` y los campos morfométricos de cada polígono de copa.
-    Si shapely no está disponible devuelve la tabla con todo a NaN."""
+def metricas(entidades, decimales=3, con_lineas=False):
+    """DataFrame con `id` y los campos morfométricos de cada polígono de copa. Con
+    `con_lineas=True` devuelve además las entidades de línea (eje, secante y las dos
+    anchuras), listas para `vectores.guardar_vector`.
+
+    Si shapely no está disponible, la tabla sale con todo a NaN y sin líneas."""
     ids = [int(e['props']['id']) for e in entidades]
     if not HAY_SHAPELY or not ids:
-        return pd.DataFrame({'id': ids, **{c: np.nan for c in CAMPOS}})
-    filas = []
+        vacio = pd.DataFrame({'id': ids, **{c: np.nan for c in CAMPOS}})
+        return (vacio, []) if con_lineas else vacio
+    filas, lineas = [], []
     for e in entidades:
         try:
-            filas.append(_de_un_poligono(_poligono(e)))
+            m, g = _de_un_poligono(_poligono(e))
         except Exception:
-            filas.append(dict.fromkeys(CAMPOS, np.nan))
+            m, g = dict.fromkeys(CAMPOS, np.nan), dict.fromkeys(TIPOS_LINEA, None)
+        filas.append(m)
+        if con_lineas:
+            lineas += _entidades_linea(int(e['props']['id']), g, decimales)
     df = pd.DataFrame(filas, columns=CAMPOS).round(decimales)
     df.insert(0, 'id', ids)
-    return df
+    return (df, lineas) if con_lineas else df
+
+
+def _entidades_linea(ident, geoms, decimales=3):
+    """Una entidad LineString por cada línea que exista, con su longitud y su azimut.
+    Si un corte sale partido en varios trozos se dibuja el más largo, pero la longitud
+    que va en la tabla de copas es la suma, como en el original."""
+    out = []
+    for tipo in TIPOS_LINEA:
+        g = geoms.get(tipo)
+        if g is None or g.is_empty:
+            continue
+        c = list(g.coords)
+        out.append(dict(tipo="LineString", coords=np.asarray(c), props=dict(
+            id=ident, linea=tipo, largo_m=round(g.length, decimales),
+            azimut=round(_azimut(c[0][0], c[0][1], c[-1][0], c[-1][1]), decimales))))
+    return out
 
 
 def anotar(entidades, df):

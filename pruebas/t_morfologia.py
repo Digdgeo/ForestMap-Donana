@@ -56,11 +56,30 @@ print("circulo OK: compact %.3f, shape_idx %.3f, elongacion %.3f" % (m['compact'
 
 # 4) forma en C: la envolvente convexa delata el entrante, el eje mayor NO sale de ella
 c = ent([(0, 0), (10, 0), (10, 3), (3, 3), (3, 7), (10, 7), (10, 10), (0, 10), (0, 0)])
-m = mo.metricas([c]).iloc[0]
+m, ln = mo.metricas([c], con_lineas=True)
+m = m.iloc[0]
 assert m['convex'] < 0.75, m['convex']
 poly = Polygon(c['coords'][0])
 assert not LineString([(0, 0), (10, 10)]).within(poly)
-print("forma en C OK: convex %.3f, eje %.3f (la diagonal completa no cabe)" % (m['convex'], m['major_len']))
+# la secante existe (hay entrante) y es mas larga que el eje interior
+assert np.isfinite(m['exter_len']), m['exter_len']
+assert m['exter_len'] > m['major_len'], (m['exter_len'], m['major_len'])
+assert abs(m['exter_len'] - 10 * math.sqrt(2)) < 1e-3, m['exter_len']   # redondeo a 3 decimales
+tipos = sorted(e['props']['linea'] for e in ln)
+assert tipos == ['anch_max', 'anch_med', 'eje', 'secante'], tipos
+assert all(e['tipo'] == "LineString" for e in ln)
+assert all(int(e['props']['id']) == 1 for e in ln)
+por = {e['props']['linea']: e for e in ln}
+assert abs(por['eje']['props']['largo_m'] - m['major_len']) < 1e-3
+assert abs(por['secante']['props']['largo_m'] - m['exter_len']) < 1e-3
+print("forma en C OK: convex %.3f, eje %.3f, secante %.3f, 4 lineas"
+      % (m['convex'], m['major_len'], m['exter_len']))
+
+# 4 bis) poligono convexo: no hay secante posible, la columna va vacia
+m2, ln2 = mo.metricas([ent([(0, 0), (6, 0), (6, 4), (0, 4), (0, 0)], i=2)], con_lineas=True)
+assert not np.isfinite(m2.iloc[0]['exter_len']), m2.iloc[0]['exter_len']
+assert sorted(e['props']['linea'] for e in ln2) == ['anch_max', 'anch_med', 'eje']
+print("convexo OK: sin secante, 3 lineas")
 
 # 5) poligono con hueco: el area baja, la convexidad tambien
 anillo = ent([(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)],

@@ -121,6 +121,7 @@ def exportar_todo(carpeta, modelos, roi, arb, estr, tablas_est=None, comp=None, 
 
         v = A['vec']
         for nombre, lista in (("Arboles_apices", v['apices']), ("Copas", v['copas']),
+                              ("Copas_lineas", v.get('lineas_copa') or []),
                               ("Capas_altura_arbol", v['capas_arbol']), ("Capas_altura", v['capas_global'])):
             if lista:
                 reg(vc.guardar_vector(os.path.join(sub['VECTORIALES'], f"{nombre}_{et}.{ext}"), lista, epsg, f"{nombre}_{et}"))

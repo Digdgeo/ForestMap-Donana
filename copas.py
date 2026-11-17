@@ -340,7 +340,7 @@ def _geom(partes):
 def construir_vectores(malla, res, labels, chm, tabla, capas, simplificar=0.0):
     """Entidades GeoJSON-like: copas, capas (árbol×banda), capas globales y ápices."""
     x0, y1, _, _ = malla
-    out = {'copas': [], 'capas_arbol': [], 'capas_global': [], 'apices': []}
+    out = {'copas': [], 'capas_arbol': [], 'capas_global': [], 'apices': [], 'lineas_copa': []}
     if len(tabla) == 0:
         return out
 

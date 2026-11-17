@@ -87,7 +87,7 @@ def analizar_arboles(modelos, datos, et, params, roi, est=None, tabla_est=None, 
         tabla['vol_voxel_m3'] = vv[tabla['id'].values - 1]
     vec = cp.construir_vectores(malla, res, labels, chm_eff, tabla, cap, simplificar=res * 0.35)
     if morfologia and len(tabla):
-        df_m = mo.metricas(vec['copas'])
+        df_m, vec['lineas_copa'] = mo.metricas(vec['copas'], con_lineas=True)
         mo.anotar(vec['copas'], df_m)
         tabla = tabla.merge(df_m, on='id', how='left')
     rodal = cp.resumen_rodal(tabla, chm_eff, labels, roi_m, res, params.hcorte_m, excl, cap)

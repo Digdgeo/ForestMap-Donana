@@ -46,10 +46,16 @@ los valores coinciden con los que daría QGIS sobre la capa exportada:
 |---|---|
 | `perimeter` | perímetro del polígono (m) |
 | `major_len` · `major_azim` | diagonal interior más larga (eje mayor) y su azimut, 0–180° |
+| `exter_len` · `exter_azim` | diagonal **secante**: la más larga que se sale por un entrante, y su azimut. Vacía en copas convexas |
 | `orient` | orientación del lado largo del rectángulo mínimo rotado, 0–180° |
 | `mid_width` · `max_width` | anchura perpendicular al eje mayor: en su punto medio y la máxima |
 | `elongation` | `major_len / max_width` |
 | `compact` · `rectang` · `convex` · `shape_idx` | índices de forma (Polsby-Popper, rectangularidad, convexidad, crenulación) |
+
+Además se exporta la capa de líneas **`Copas_lineas_<época>`**, con las cuatro que dibuja la
+herramienta de QGIS —`eje`, `secante`, `anch_med` y `anch_max`— y sus campos `id`, `linea`,
+`largo_m` y `azimut`. En QGIS se estiliza por categorías sobre `linea` y se ve encima de los
+polígonos de copa de dónde sale cada número.
 
 Se activa con la casilla **«Parámetros de forma de la copa»** del paso 5 (por defecto sí) y
 cuesta unos 4,5 ms por copa. Si falta `shapely`, las columnas salen vacías y el resto sigue igual.
