@@ -1,4 +1,4 @@
-# ForestMap Doñana V3
+# ForestMap Doñana
 
 Inventario forestal individual con LiDAR para el sabinar de Doñana (*Juniperus phoenicea* subsp. *turbinata*).
 
